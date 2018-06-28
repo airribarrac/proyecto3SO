@@ -10,27 +10,46 @@ private:
 	mutex mtx,qmtx;
 	queue<function<void(void)>> tareas;
 	void waitforwork(){
-		unique_lock<mutex> lock(mtx);
-		while(1){
-			cv.wait(lock);	//hace tuto
-			qmtx.lock();
-			//saco tarea;
-			auto tarea = tareas.front();
-			tareas.pop();
-			qmtx.unlock();
-			disponibles--;
-			//HACER TAREA
-			tarea();
-			disponibles++;
-		}
+		
 	}
 
 public:
 	ThreadPool(int _size){
+		puts("voy a crear");
 		size=_size;
 		disponibles=size;
 		for(int i=0;i<size;i++){
-			thread t([this]{waitforwork();});
+			puts("creo");
+			thread t(
+				[this]{
+					puts("owo");
+					while(1){
+						//puts("alo");
+						unique_lock<mutex> tlock(this->mtx);
+						cv.wait(tlock);	//hace tuto
+						//muere aqui
+						//puts("asdasd");
+							qmtx.lock();
+						//saco tarea;
+						auto tarea = tareas.front();
+						tareas.pop();
+						qmtx.unlock();
+						disponibles--;
+						//HACER TAREA
+						tarea();
+						qmtx.lock();
+						while(disponibles==0 && !tareas.empty()){	//mientras todas estan ocupadas y hay tareas
+							qmtx.unlock();
+							auto tarea = tareas.front();
+							tareas.pop();					//trato de hacer mientras quedan
+							qmtx.lock();
+						}
+						qmtx.unlock();
+						disponibles++;	//si no queda nada estoy libre
+					}
+				}
+			);
+			t.detach();
 		}
 	}
 	template<
@@ -42,12 +61,67 @@ public:
 		argumentos && ...args) -> std::packaged_task<MRtrn(void)> {
 		auto aux = std::bind(std::forward<funcion>(func),
 		std::forward<argumentos>(args)...	);
+		qmtx.lock();
 		tareas.push(aux);
+		qmtx.unlock();
+		cv.notify_one();
 		return std::packaged_task<MRtrn(void)>(aux);
+	}
+	template<
+		typename funcion,
+		typename ... argumentos,
+		typename MRtrn=typename std::result_of<funcion(argumentos...)>::type>
+	auto spawn(
+		funcion && func,
+		argumentos && ...args) -> std::packaged_task<MRtrn(void)> {
+		auto aux = std::bind(std::forward<funcion>(func),
+		std::forward<argumentos>(args)...	);
+		if(disponibles>0){
+			qmtx.lock();
+			tareas.push(aux);
+			qmtx.unlock();
+			cv.notify_one();
+			return std::packaged_task<MRtrn(void)>(aux);
+		}else{
+			aux();
+			return std::packaged_task<MRtrn(void)>(aux);
+		}	
 	}
 };
 
 
 int main(){
-
+	vector<int> v;
+	int tam = 25;
+	for(int i=0;i<tam;i++){
+		v.push_back(i);
+	}
+	random_shuffle(v.begin(), v.end());
+	cout<<"vector a usar"<<endl;
+	for(int i=0;i<tam;i++){
+		cout<<v[i]<<" ";
+	}
+	cout<<endl;
+	ThreadPool tp(5);
+	vector<packaged_task<int()> > res;
+	for(int i=0;i<5;i++){
+		res.push_back(
+			tp.encolar([i,tam,v]{
+				cout<<"aloalo"<<endl;
+				int mini = v[i];
+				for(int j=1;j<tam/5;j++){
+					mini = min(v[i+j],mini);
+				}
+				return mini;
+			})
+		);
+	}
+	puts("kk");
+	int rmini = res[0].get_future().get();
+	puts("asdas");
+	for(int i=1;i<res.size();i++){
+		rmini = min(res[i].get_future().get(),rmini);
+	}
+	cout<<"minimo es: "<<rmini<<endl;
+	return 0;
 }
