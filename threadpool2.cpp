@@ -27,25 +27,25 @@ public:
 					while(1){
 						//puts("alo");
 						unique_lock<mutex> tlock(this->mtx);
-						cv.wait(tlock);	//hace tuto
+						this->cv.wait(tlock);	//hace tuto
 						//muere aqui
 						//puts("asdasd");
-							qmtx.lock();
+						this->qmtx.lock();
 						//saco tarea;
-						auto tarea = tareas.front();
-						tareas.pop();
-						qmtx.unlock();
+						auto tarea = move(this->tareas.front());
+						this->tareas.pop();
+						this->qmtx.unlock();
 						disponibles--;
 						//HACER TAREA
 						tarea();
-						qmtx.lock();
+						this->qmtx.lock();
 						while(disponibles==0 && !tareas.empty()){	//mientras todas estan ocupadas y hay tareas
-							qmtx.unlock();
-							auto tarea = tareas.front();
-							tareas.pop();					//trato de hacer mientras quedan
-							qmtx.lock();
+							this->qmtx.unlock();
+							auto tarea = move(this->tareas.front());
+							this->tareas.pop();					//trato de hacer mientras quedan
+							this->qmtx.lock();
 						}
-						qmtx.unlock();
+						this->qmtx.unlock();
 						disponibles++;	//si no queda nada estoy libre
 					}
 				}
@@ -66,7 +66,9 @@ public:
 		tareas.push(aux);
 		qmtx.unlock();
 		cv.notify_one();
-		return std::packaged_task<MRtrn(void)>(aux);
+		auto tarea = make_shared<packaged_task<MRtrn()> >(aux);
+		future<MRtrn> res = tarea->get_future();
+		return res;
 	}
 	template<
 		typename funcion,
@@ -88,6 +90,12 @@ public:
 			return std::packaged_task<MRtrn(void)>(aux);
 		}	
 	}
+	auto waitTodos(){
+	    unique_lock<mutex> lock(mtx);
+	    cv.notify_all();
+	    for(thread &hilo: hilos)
+	        hilo.join();
+	}
 };
 
 
@@ -104,25 +112,19 @@ int main(){
 	}
 	cout<<endl;
 	ThreadPool tp(5);
-	vector<packaged_task<int()> > res;
+	vector<future<int> > res;
 	for(int i=0;i<5;i++){
-		res.push_back(
-			tp.encolar([i,tam,v]{
+		res.emplace_back(
+			tp.encolar([i,v]{
 				cout<<"aloalo"<<endl;
-				int mini = v[i];
-				for(int j=1;j<tam/5;j++){
-					mini = min(v[i+j],mini);
-				}
-				return mini;
+				
+				return v[i];
 			})
 		);
 	}
 	puts("kk");
-	int rmini = res[0].get_future().get();
-	puts("asdas");
-	for(int i=1;i<res.size();i++){
-		rmini = min(res[i].get_future().get(),rmini);
-	}
-	cout<<"minimo es: "<<rmini<<endl;
+	for(auto && result: res)
+        std::cout << result.get() << ' ';
+    std::cout << std::endl;
 	return 0;
 }
