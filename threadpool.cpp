@@ -6,6 +6,7 @@ class ThreadPool{
 private:
 	int size;
 	atomic<int> disponibles;
+	atomic<bool> stopped;
 	condition_variable cv;
 	mutex mtx,qmtx;
 	queue<function<void()>> tareas;
@@ -16,6 +17,7 @@ public:
 		puts("voy a crear");
 		size=_size;
 		disponibles=size;
+		stopped=false;
 		for(int i=0;i<size;i++){
 			puts("creo");
 			hebras.push_back(thread (
@@ -36,11 +38,16 @@ public:
 						//HACER TAREA
 						tarea();
 						this->qmtx.lock();
+
 						while(this->disponibles==0 && !this->tareas.empty()){	//mientras todas estan ocupadas y hay tareas
 							this->qmtx.unlock();
 							auto tarea = this->tareas.front();
 							this->tareas.pop();					//trato de hacer mientras quedan
 							this->qmtx.lock();
+						}
+						if(this->stopped && this->tareas.empty()){
+							puts("F");
+							return;
 						}
 						this->qmtx.unlock();
 						this->disponibles++;	//si no queda nada estoy libre
@@ -56,14 +63,15 @@ public:
 		typename MRtrn=typename std::result_of<funcion(argumentos...)>::type>
 	auto encolar(
 		funcion && func,
-		argumentos && ...args) -> std::packaged_task<MRtrn(void)> {
-		auto aux = std::bind(std::forward<funcion>(func),
-		std::forward<argumentos>(args)...	);
+		argumentos && ...args) -> std::future<MRtrn> {
+		auto tarea = make_shared<packaged_task<MRtrn()> >(
+			bind(forward<funcion>(func),forward<argumentos>(args)...));
+		future<MRtrn> result = tarea->get_future();
 		qmtx.lock();
-		tareas.push(aux);
+		tareas.push([tarea](){(*tarea)();});
 		qmtx.unlock();
 		cv.notify_one();
-		return std::packaged_task<MRtrn(void)>(aux);
+		return result;
 	}
 	template<
 		typename funcion,
@@ -71,19 +79,28 @@ public:
 		typename MRtrn=typename std::result_of<funcion(argumentos...)>::type>
 	auto spawn(
 		funcion && func,
-		argumentos && ...args) -> std::packaged_task<MRtrn(void)> {
-		auto aux = std::bind(std::forward<funcion>(func),
-		std::forward<argumentos>(args)...	);
+		argumentos && ...args) -> std::future<MRtrn> {
+		auto tarea = make_shared<packaged_task<MRtrn()> >(
+			bind(forward<funcion>(func),forward<argumentos>(args)...));
+		future<MRtrn> result = tarea->get_future();
 		if(disponibles>0){
 			qmtx.lock();
-			tareas.push(aux);
+			tareas.push([tarea](){(*tarea)();});
 			qmtx.unlock();
 			cv.notify_one();
-			return std::packaged_task<MRtrn(void)>(aux);
+			return result;
 		}else{
-			aux();
-			return std::packaged_task<MRtrn(void)>(aux);
+			tarea();
+			return result;
 		}	
+	}
+	void waitTodos(){
+		stopped = true;
+		puts("aaaaaaaaaaaaaaaAAAAAAAAAAAAAAAAAAAA");
+		cv.notify_all();
+		for(int i=0;i<hebras.size();i++){
+			hebras[i].join();
+		}
 	}
 };
 
@@ -101,7 +118,7 @@ int main(){
 	}
 	cout<<endl;
 	ThreadPool tp(5);
-	vector<packaged_task<int()> > res;
+	vector<future<int> > res;
 	for(int i=0;i<5;i++){
 		res.push_back(
 			tp.encolar([i,tam,v]{
@@ -115,11 +132,13 @@ int main(){
 			})
 		);
 	}
-	puts("kk");	''
-	int rmini = res[0].get_future().get();
+	puts("kk");			
+	tp.waitTodos();
+	int rmini = res[0].get();
 	puts("asdas");
+
 	for(int i=1;i<res.size();i++){
-		rmini = min(res[i].get_future().get(),rmini);
+		rmini = min(res[i].get(),rmini);
 	}
 	cout<<"minimo es: "<<rmini<<endl;
 	return 0;
