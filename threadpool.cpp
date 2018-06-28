@@ -8,10 +8,8 @@ private:
 	atomic<int> disponibles;
 	condition_variable cv;
 	mutex mtx,qmtx;
-	queue<function<void(void)>> tareas;
-	void waitforwork(){
-		
-	}
+	queue<function<void()>> tareas;
+	vector<thread> hebras;
 
 public:
 	ThreadPool(int _size){
@@ -20,7 +18,7 @@ public:
 		disponibles=size;
 		for(int i=0;i<size;i++){
 			puts("creo");
-			thread t(
+			hebras.push_back(thread (
 				[this]{
 					puts("owo");
 					while(1){
@@ -29,27 +27,27 @@ public:
 						cv.wait(tlock);	//hace tuto
 						//muere aqui
 						//puts("asdasd");
-							qmtx.lock();
+						this->qmtx.lock();
 						//saco tarea;
-						auto tarea = tareas.front();
-						tareas.pop();
-						qmtx.unlock();
-						disponibles--;
+						auto tarea = this->tareas.front();
+						this->tareas.pop();
+						this->qmtx.unlock();
+						this->disponibles--;
 						//HACER TAREA
 						tarea();
-						qmtx.lock();
-						while(disponibles==0 && !tareas.empty()){	//mientras todas estan ocupadas y hay tareas
-							qmtx.unlock();
-							auto tarea = tareas.front();
-							tareas.pop();					//trato de hacer mientras quedan
-							qmtx.lock();
+						this->qmtx.lock();
+						while(this->disponibles==0 && !this->tareas.empty()){	//mientras todas estan ocupadas y hay tareas
+							this->qmtx.unlock();
+							auto tarea = this->tareas.front();
+							this->tareas.pop();					//trato de hacer mientras quedan
+							this->qmtx.lock();
 						}
-						qmtx.unlock();
-						disponibles++;	//si no queda nada estoy libre
+						this->qmtx.unlock();
+						this->disponibles++;	//si no queda nada estoy libre
 					}
 				}
-			);
-			t.detach();
+			));
+			
 		}
 	}
 	template<
@@ -112,11 +110,12 @@ int main(){
 				for(int j=1;j<tam/5;j++){
 					mini = min(v[i+j],mini);
 				}
+				cout<<"termine"<<endl;
 				return mini;
 			})
 		);
 	}
-	puts("kk");
+	puts("kk");	''
 	int rmini = res[0].get_future().get();
 	puts("asdas");
 	for(int i=1;i<res.size();i++){
