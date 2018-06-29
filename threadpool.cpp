@@ -14,15 +14,15 @@ private:
 
 public:
 	ThreadPool(int _size){
-		puts("voy a crear");
+		//puts("voy a crear");
 		size=_size;
 		disponibles=size;
 		stopped=false;
 		for(int i=0;i<size;i++){
-			puts("creo");
+			//puts("creo");
 			hebras.push_back(thread (
 				[this]{
-					puts("owo");
+					//puts("owo");
 					while(1){
 						//puts("alo");
 						unique_lock<mutex> tlock(this->mtx);
@@ -46,7 +46,7 @@ public:
 							this->qmtx.lock();
 						}
 						if(this->stopped && this->tareas.empty()){
-							puts("F");
+							//puts("F");
 							return;
 						}
 						this->qmtx.unlock();
@@ -96,7 +96,7 @@ public:
 	}
 	void waitTodos(){
 		stopped = true;
-		puts("aaaaaaaaaaaaaaaAAAAAAAAAAAAAAAAAAAA");
+		//puts("aaaaaaaaaaaaaaaAAAAAAAAAAAAAAAAAAAA");
 		cv.notify_all();
 		for(int i=0;i<hebras.size();i++){
 			hebras[i].join();
@@ -107,6 +107,7 @@ public:
 
 int main(){
 	vector<int> v;
+	puts("PROFE SOMOS UN DESASTRE Y NO PUDIMOS HACERLO :(");
 	int tam = 25;
 	for(int i=0;i<tam;i++){
 		v.push_back(i);
