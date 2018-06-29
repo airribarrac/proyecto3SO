@@ -1,5 +1,6 @@
 #include <functional>
 #include <bits/stdc++.h>
+#include <unistd.h>
 using namespace std;
 
 class ThreadPool{
@@ -14,21 +15,16 @@ private:
 
 public:
 	ThreadPool(int _size){
-		//puts("voy a crear");
 		size=_size;
 		disponibles=size;
 		stopped=false;
 		for(int i=0;i<size;i++){
-			//puts("creo");
 			hebras.push_back(thread (
 				[this]{
-					//puts("owo");
 					while(1){
-						//puts("alo");
 						unique_lock<mutex> tlock(this->mtx);
-						cv.wait(tlock);	//hace tuto
-						//muere aqui
-						//puts("asdasd");
+						this->cv.wait(tlock);	//hace tuto
+						puts("Hace tarea");
 						this->qmtx.lock();
 						//saco tarea;
 						auto tarea = this->tareas.front();
@@ -40,16 +36,19 @@ public:
 						this->qmtx.lock();
 
 						while(this->disponibles==0 && !this->tareas.empty()){	//mientras todas estan ocupadas y hay tareas
+							puts("alo");
 							this->qmtx.unlock();
+							this->cv.wait(tlock);
 							auto tarea = this->tareas.front();
 							this->tareas.pop();					//trato de hacer mientras quedan
 							this->qmtx.lock();
+							tarea();
 						}
 						if(this->stopped && this->tareas.empty()){
-							//puts("F");
 							return;
 						}
 						this->qmtx.unlock();
+						this->cv.notify_one();
 						this->disponibles++;	//si no queda nada estoy libre
 					}
 				}
@@ -96,18 +95,18 @@ public:
 	}
 	void waitTodos(){
 		stopped = true;
-		//puts("aaaaaaaaaaaaaaaAAAAAAAAAAAAAAAAAAAA");
-		cv.notify_all();
-		for(int i=0;i<hebras.size();i++){
-			hebras[i].join();
-		}
+	    cv.notify_all();
+	    for(thread &hilo: hebras)
+	        hilo.join();
+	}
+	~ThreadPool(){
+		waitTodos();
 	}
 };
 
 
 int main(){
 	vector<int> v;
-	puts("PROFE SOMOS UN DESASTRE Y NO PUDIMOS HACERLO :(");
 	int tam = 25;
 	for(int i=0;i<tam;i++){
 		v.push_back(i);
@@ -118,29 +117,19 @@ int main(){
 		cout<<v[i]<<" ";
 	}
 	cout<<endl;
-	ThreadPool tp(5);
+	ThreadPool tp(50);
 	vector<future<int> > res;
-	for(int i=0;i<5;i++){
+	for(int i=0;i<25;i++){
 		res.push_back(
 			tp.encolar([i,tam,v]{
-				cout<<"aloalo"<<endl;
-				int mini = v[i];
-				for(int j=1;j<tam/5;j++){
-					mini = min(v[i+j],mini);
-				}
-				cout<<"termine"<<endl;
-				return mini;
+				sleep(1);
+				int num = v[i] * i;
+				return num;
 			})
 		);
 	}
-	puts("kk");			
+	for(auto && result: res)
+        cout << result.get() << endl;
 	tp.waitTodos();
-	int rmini = res[0].get();
-	puts("asdas");
-
-	for(int i=1;i<res.size();i++){
-		rmini = min(res[i].get(),rmini);
-	}
-	cout<<"minimo es: "<<rmini<<endl;
 	return 0;
 }

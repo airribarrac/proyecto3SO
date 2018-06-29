@@ -59,7 +59,7 @@ public:
 		typename MRtrn=typename std::result_of<funcion(argumentos...)>::type>
 	auto encolar(
 		funcion && func,
-		argumentos && ...args) -> std::packaged_task<MRtrn(void)> {
+		argumentos && ...args) -> std::future<MRtrn> {
 		auto aux = std::bind(std::forward<funcion>(func),
 		std::forward<argumentos>(args)...	);
 		qmtx.lock();
@@ -90,7 +90,7 @@ public:
 			return std::packaged_task<MRtrn(void)>(aux);
 		}	
 	}
-	auto waitTodos(){
+	void waitTodos(){
 	    unique_lock<mutex> lock(mtx);
 	    cv.notify_all();
 	    for(thread &hilo: hilos)
@@ -126,5 +126,6 @@ int main(){
 	for(auto && result: res)
         std::cout << result.get() << ' ';
     std::cout << std::endl;
+    tp.waitTodos();
 	return 0;
 }
